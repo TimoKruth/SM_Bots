@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.ServiceModel.Web;
+using System.Threading;
+using ExampleBot;
 using NDesk.Options;
 
 namespace SteamBot
@@ -19,6 +22,14 @@ namespace SteamBot
         private static int botIndex = -1;
         private static BotManager manager;
         private static bool isclosing = false;
+        
+        private static bool _shouldSendActivationNote = true;
+        private static int _sencActivationRefreshRate = 60000; // Send Call every Minute
+        private static int _checkOfferRate= 600000; // Send Call every Minute
+        private static bool _shouldCheckOffers = true;
+        private static RestDemoServices DemoServices;
+        private static WebServiceHost _serviceHost;
+        private static Bot Bot;
 
         [STAThread]
         public static void Main(string[] args)
@@ -43,6 +54,86 @@ namespace SteamBot
             {
                 BotMode(botIndex);
             }
+            Console.WriteLine("Bot Mode over");
+            StartRestServer();
+        }
+                
+        private static void StartRestServer()
+        {
+            Console.WriteLine("Starting Rest Server");
+            Thread.Sleep(50000);
+            while (Bot == null || Bot.SteamClient == null || Bot.SteamClient.SteamID == null)
+            {
+                Console.WriteLine("SteamID is null");
+                Thread.Sleep(50000);
+            }
+            DemoServices = new RestDemoServices(Bot.GetUserHandler(Bot.SteamClient.SteamID));
+            _serviceHost = new WebServiceHost(
+                DemoServices,
+                new Uri("http://localhost:1234/")
+            );
+            AddBots();
+            //activateAutomatedOfferCheck();
+            activateAutomatedRefresh();
+            _serviceHost.Open();
+/*
+            Console.ReadKey();
+            _serviceHost.Close();          
+*/
+        }
+        
+        private static void activateAutomatedOfferCheck()
+        {
+            new Thread(() =>
+            {
+                while (_shouldCheckOffers)
+                {
+                    checkOffers();
+                    Thread.Sleep(_checkOfferRate);
+                }
+            }).Start();
+        }
+
+        private static void activateAutomatedRefresh()
+        {
+            var refreshRate = Service.GetEnvVar("REFRESH_RATE");
+            if(refreshRate!=null)_sencActivationRefreshRate = Int32.Parse(refreshRate);
+            new Thread(() =>
+            {
+                while (_shouldSendActivationNote)
+                {
+                    registerBot();
+                    Thread.Sleep(_sencActivationRefreshRate);
+                }
+            }).Start();
+        }
+        
+        ~Program(){
+            DemoServices._restClient.RestEndCall(Service.GetLocalIpAddress(), "SM_BOT_TEST");
+            StopRestServer();
+        }
+
+
+        private static void registerBot()
+        {
+            DemoServices._restClient.RestCall(Bot.DisplayName, Service.GetLocalIpAddress(), "SM_BOT_TEST");
+                
+        }                
+        private static void checkOffers()
+        {
+            DemoServices.checkAllOffers();
+                
+        }                
+
+        
+        private static void AddBots()
+        {
+            DemoServices.AddBot(Bot);
+        }
+        
+        private static void StopRestServer()
+        {
+            _serviceHost.Close();
         }
 
         #region SteamBot Operational Modes
@@ -122,6 +213,10 @@ namespace SteamBot
             manager = new BotManager();
 
             var loadedOk = manager.LoadConfiguration("settings.json");
+            var userName = Service.GetEnvVar("NAME");
+            var db = Service.GetEnvVar("DATABASE_USER");
+            var apiKey = Service.GetEnvVar("API_KEY");
+            Console.WriteLine("Username: "+userName);
 
             if (!loadedOk)
             {
@@ -129,6 +224,11 @@ namespace SteamBot
                     "Configuration file Does not exist or is corrupt. Please rename 'settings-template.json' to 'settings.json' and modify the settings to match your environment");
                 Console.Write("Press Enter to exit...");
                 Console.ReadLine();
+            }
+            else if (userName != null && db != null)
+            {
+                Console.WriteLine("Bot wird gestartet, YAY!");
+                Bot = manager.StartBot(userName, db, apiKey);
             }
             else
             {

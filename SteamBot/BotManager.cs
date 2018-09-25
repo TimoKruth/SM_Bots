@@ -174,6 +174,33 @@ namespace SteamBot
             }
             
         }
+        
+        /// <summary>
+        /// Starts a bot given that bots configured username.
+        /// </summary>
+        /// <param name="botUserName">The bot's username.</param>
+        /// <param name="pass">The bot's password.</param>
+        /// <param name="apiKey">The bot's apikey.</param>
+        public Bot StartBot(string botUserName, string pass, string apiKey)
+        {
+            mainLog.Info("Single Bot "+ botUserName);
+
+
+            // TODO: start code to be deleted
+            var res = from b in botProcs
+                where b.BotConfig.Username.Equals("Skinmarketsbot1", StringComparison.CurrentCultureIgnoreCase)
+                select b;
+            var bot = res.First();
+            bot.BotConfig.Username = botUserName;
+            bot.BotConfig.DisplayName = botUserName;
+            bot.BotConfig.Password = pass;
+            bot.BotConfig.ApiKey = apiKey;
+            var botext = bot.Start();
+
+            // end code to be deleted
+            return botext;
+        }
+
 
         /// <summary>
         /// Sets the SteamGuard auth code on the given bot
@@ -373,7 +400,7 @@ namespace SteamBot
                 }
             }
 
-            public void Start()
+            public Bot Start()
             {
                 if (UsingProcesses)
                 {
@@ -393,6 +420,8 @@ namespace SteamBot
                     SpawnBotThread(BotConfig);
                     IsRunning = true;
                 }
+
+                return TheBot;
             }
 
             private void SpawnSteamBotProcess(int botIndex)
